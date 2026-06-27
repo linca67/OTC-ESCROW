@@ -1,0 +1,1094 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>OTC Escrow — Trustless P2P Trading</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/ethers/6.7.0/ethers.umd.min.js"></script>
+<style>
+  :root {
+    --bg:        #0a0a0f;
+    --surface:   #13131a;
+    --border:    #1e1e2e;
+    --accent:    #00e5ff;
+    --accent2:   #7c3aed;
+    --green:     #00d084;
+    --red:       #ff4d6d;
+    --amber:     #ffbe0b;
+    --text:      #e8e8f0;
+    --muted:     #6b6b80;
+    --card:      #16161f;
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: 'SF Mono', 'Fira Code', monospace;
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* Grid noise background */
+  body::before {
+    content: '';
+    position: fixed;
+    inset: 0;
+    background-image:
+      linear-gradient(rgba(0,229,255,0.03) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(0,229,255,0.03) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  /* ── NAV ── */
+  nav {
+    position: sticky;
+    top: 0;
+    z-index: 100;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 16px 32px;
+    background: rgba(10,10,15,0.85);
+    backdrop-filter: blur(12px);
+    border-bottom: 1px solid var(--border);
+  }
+
+  .logo {
+    font-size: 18px;
+    font-weight: 700;
+    letter-spacing: -0.5px;
+    color: var(--accent);
+  }
+
+  .logo span { color: var(--text); }
+
+  .nav-right { display: flex; align-items: center; gap: 12px; }
+
+  .network-badge {
+    font-size: 11px;
+    padding: 4px 10px;
+    border-radius: 20px;
+    background: rgba(124,58,237,0.15);
+    border: 1px solid var(--accent2);
+    color: var(--accent2);
+    display: none;
+  }
+
+  .btn {
+    padding: 10px 20px;
+    border-radius: 8px;
+    border: none;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    letter-spacing: 0.3px;
+  }
+
+  .btn-primary {
+    background: var(--accent);
+    color: #000;
+  }
+  .btn-primary:hover { background: #33eaff; transform: translateY(-1px); }
+
+  .btn-outline {
+    background: transparent;
+    color: var(--accent);
+    border: 1px solid var(--accent);
+  }
+  .btn-outline:hover { background: rgba(0,229,255,0.08); }
+
+  .btn-danger {
+    background: transparent;
+    color: var(--red);
+    border: 1px solid var(--red);
+  }
+  .btn-danger:hover { background: rgba(255,77,109,0.08); }
+
+  .btn-success {
+    background: var(--green);
+    color: #000;
+  }
+  .btn-success:hover { background: #00f09a; }
+
+  .btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+    transform: none;
+  }
+
+  /* ── HERO ── */
+  .hero {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 80px 24px 60px;
+  }
+
+  .hero-eyebrow {
+    display: inline-block;
+    font-size: 11px;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: var(--accent);
+    border: 1px solid rgba(0,229,255,0.3);
+    padding: 4px 14px;
+    border-radius: 20px;
+    margin-bottom: 24px;
+  }
+
+  .hero h1 {
+    font-size: clamp(36px, 6vw, 64px);
+    font-weight: 800;
+    line-height: 1.05;
+    letter-spacing: -2px;
+    margin-bottom: 20px;
+    font-family: system-ui, sans-serif;
+  }
+
+  .hero h1 em {
+    font-style: normal;
+    color: var(--accent);
+  }
+
+  .hero p {
+    font-size: 16px;
+    color: var(--muted);
+    max-width: 520px;
+    margin: 0 auto 40px;
+    line-height: 1.6;
+    font-family: system-ui, sans-serif;
+  }
+
+  .stats-row {
+    display: flex;
+    justify-content: center;
+    gap: 48px;
+    margin-top: 48px;
+    flex-wrap: wrap;
+  }
+
+  .stat { text-align: center; }
+  .stat-value {
+    font-size: 28px;
+    font-weight: 700;
+    color: var(--accent);
+    letter-spacing: -1px;
+  }
+  .stat-label {
+    font-size: 11px;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    margin-top: 4px;
+  }
+
+  /* ── TABS ── */
+  .tabs-wrap {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto;
+    padding: 0 24px 80px;
+  }
+
+  .tabs {
+    display: flex;
+    gap: 4px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 4px;
+    margin-bottom: 24px;
+  }
+
+  .tab {
+    flex: 1;
+    padding: 10px;
+    border-radius: 8px;
+    border: none;
+    background: transparent;
+    color: var(--muted);
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.15s;
+    text-align: center;
+  }
+
+  .tab.active {
+    background: var(--card);
+    color: var(--accent);
+    border: 1px solid var(--border);
+  }
+
+  .tab-content { display: none; }
+  .tab-content.active { display: block; }
+
+  /* ── CARDS ── */
+  .card {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 28px;
+    position: relative;
+    overflow: hidden;
+  }
+
+  .card::before {
+    content: '';
+    position: absolute;
+    top: 0; left: 0; right: 0;
+    height: 1px;
+    background: linear-gradient(90deg, transparent, var(--accent), transparent);
+    opacity: 0.3;
+  }
+
+  .card-title {
+    font-size: 13px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    margin-bottom: 24px;
+  }
+
+  /* ── FORM ── */
+  .form-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 16px;
+  }
+
+  .form-group { display: flex; flex-direction: column; gap: 8px; }
+  .form-group.full { grid-column: 1 / -1; }
+
+  label {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+    color: var(--muted);
+  }
+
+  input, select {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 12px 14px;
+    color: var(--text);
+    font-family: inherit;
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.15s;
+    width: 100%;
+  }
+
+  input:focus, select:focus { border-color: var(--accent); }
+  input::placeholder { color: var(--muted); }
+
+  select option { background: var(--surface); }
+
+  .form-hint {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: -4px;
+  }
+
+  .form-actions {
+    margin-top: 24px;
+    display: flex;
+    gap: 12px;
+    justify-content: flex-end;
+  }
+
+  /* ── TRADE CARD ── */
+  .trade-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+    margin-bottom: 12px;
+    transition: border-color 0.15s;
+  }
+
+  .trade-card:hover { border-color: rgba(0,229,255,0.3); }
+
+  .trade-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 16px;
+  }
+
+  .trade-id {
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  .trade-id strong { color: var(--accent); }
+
+  .status-badge {
+    font-size: 11px;
+    padding: 3px 10px;
+    border-radius: 20px;
+    font-weight: 600;
+    letter-spacing: 0.5px;
+  }
+
+  .status-0 { background: rgba(0,208,132,0.15); color: var(--green); border: 1px solid rgba(0,208,132,0.3); }
+  .status-1 { background: rgba(255,190,11,0.15); color: var(--amber); border: 1px solid rgba(255,190,11,0.3); }
+  .status-2 { background: rgba(0,229,255,0.15); color: var(--accent); border: 1px solid rgba(0,229,255,0.3); }
+  .status-3 { background: rgba(107,107,128,0.15); color: var(--muted); border: 1px solid rgba(107,107,128,0.3); }
+
+  .trade-swap {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    margin-bottom: 16px;
+  }
+
+  .trade-side {
+    flex: 1;
+    background: var(--bg);
+    border-radius: 8px;
+    padding: 12px;
+    text-align: center;
+  }
+
+  .trade-amount {
+    font-size: 18px;
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .trade-token {
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 2px;
+  }
+
+  .swap-arrow {
+    font-size: 20px;
+    color: var(--accent);
+    flex-shrink: 0;
+  }
+
+  .trade-meta {
+    display: flex;
+    gap: 16px;
+    font-size: 11px;
+    color: var(--muted);
+    flex-wrap: wrap;
+  }
+
+  .trade-meta span { display: flex; align-items: center; gap: 4px; }
+
+  .trade-actions {
+    display: flex;
+    gap: 8px;
+    margin-top: 16px;
+    flex-wrap: wrap;
+  }
+
+  .trade-actions .btn { font-size: 12px; padding: 8px 16px; }
+
+  /* ── CONFIRM PILLS ── */
+  .confirm-row {
+    display: flex;
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .confirm-pill {
+    font-size: 10px;
+    padding: 3px 8px;
+    border-radius: 20px;
+    border: 1px solid var(--border);
+    color: var(--muted);
+  }
+
+  .confirm-pill.done {
+    background: rgba(0,208,132,0.1);
+    border-color: var(--green);
+    color: var(--green);
+  }
+
+  /* ── LOOKUP ── */
+  .lookup-row {
+    display: flex;
+    gap: 12px;
+    margin-bottom: 24px;
+  }
+
+  .lookup-row input { flex: 1; }
+
+  /* ── ALERT ── */
+  .alert {
+    padding: 12px 16px;
+    border-radius: 8px;
+    font-size: 13px;
+    margin-bottom: 16px;
+    display: none;
+    font-family: system-ui, sans-serif;
+  }
+
+  .alert-error { background: rgba(255,77,109,0.1); border: 1px solid rgba(255,77,109,0.3); color: var(--red); }
+  .alert-success { background: rgba(0,208,132,0.1); border: 1px solid rgba(0,208,132,0.3); color: var(--green); }
+  .alert-info { background: rgba(0,229,255,0.08); border: 1px solid rgba(0,229,255,0.2); color: var(--accent); }
+
+  /* ── LOADER ── */
+  .loader {
+    display: inline-block;
+    width: 14px; height: 14px;
+    border: 2px solid rgba(0,229,255,0.2);
+    border-top-color: var(--accent);
+    border-radius: 50%;
+    animation: spin 0.7s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+  }
+
+  @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ── HOW IT WORKS ── */
+  .how-section {
+    position: relative;
+    z-index: 1;
+    max-width: 860px;
+    margin: 0 auto 80px;
+    padding: 0 24px;
+  }
+
+  .section-title {
+    font-size: 11px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+    margin-bottom: 24px;
+    text-align: center;
+  }
+
+  .steps {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 16px;
+  }
+
+  .step {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 24px;
+    position: relative;
+  }
+
+  .step-num {
+    font-size: 11px;
+    color: var(--accent);
+    margin-bottom: 12px;
+    letter-spacing: 1px;
+  }
+
+  .step h3 {
+    font-size: 15px;
+    font-weight: 700;
+    margin-bottom: 8px;
+    font-family: system-ui, sans-serif;
+  }
+
+  .step p {
+    font-size: 13px;
+    color: var(--muted);
+    line-height: 1.5;
+    font-family: system-ui, sans-serif;
+  }
+
+  /* ── FOOTER ── */
+  footer {
+    position: relative;
+    z-index: 1;
+    text-align: center;
+    padding: 32px;
+    border-top: 1px solid var(--border);
+    font-size: 12px;
+    color: var(--muted);
+  }
+
+  footer a { color: var(--accent); text-decoration: none; }
+
+  /* ── WALLET NOT CONNECTED ── */
+  .connect-wall {
+    text-align: center;
+    padding: 48px 24px;
+    color: var(--muted);
+    font-family: system-ui, sans-serif;
+  }
+
+  .connect-wall p { margin-bottom: 20px; font-size: 14px; }
+
+  /* ── EMPTY STATE ── */
+  .empty {
+    text-align: center;
+    padding: 40px;
+    color: var(--muted);
+    font-family: system-ui, sans-serif;
+    font-size: 14px;
+  }
+
+  /* ── RESPONSIVE ── */
+  @media (max-width: 600px) {
+    .form-grid { grid-template-columns: 1fr; }
+    .steps { grid-template-columns: 1fr; }
+    nav { padding: 14px 16px; }
+    .hero { padding: 48px 16px 40px; }
+    .stats-row { gap: 24px; }
+    .trade-swap { flex-direction: column; }
+    .swap-arrow { transform: rotate(90deg); }
+  }
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav>
+  <div class="logo">OTC<span>Escrow</span></div>
+  <div class="nav-right">
+    <span class="network-badge" id="networkBadge">Sepolia</span>
+    <button class="btn btn-primary" id="connectBtn" onclick="connectWallet()">Connect Wallet</button>
+  </div>
+</nav>
+
+<!-- HERO -->
+<section class="hero">
+  <div class="hero-eyebrow">Trustless · Non-custodial · On-chain</div>
+  <h1>Trade crypto<br/><em>without middlemen</em></h1>
+  <p>Atomic peer-to-peer OTC swaps. Both parties deposit, both confirm, funds swap instantly. No escrow agent. No trust required.</p>
+  <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+    <button class="btn btn-primary" onclick="switchToTab('create')">Create a Trade</button>
+    <button class="btn btn-outline" onclick="switchToTab('lookup')">Look Up Trade</button>
+  </div>
+  <div class="stats-row">
+    <div class="stat">
+      <div class="stat-value" id="statTrades">—</div>
+      <div class="stat-label">Total Trades</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">0.15%</div>
+      <div class="stat-label">Fee Per Side</div>
+    </div>
+    <div class="stat">
+      <div class="stat-value">0</div>
+      <div class="stat-label">Exploits</div>
+    </div>
+  </div>
+</section>
+
+<!-- HOW IT WORKS -->
+<section class="how-section">
+  <div class="section-title">How it works</div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-num">STEP 01</div>
+      <h3>Create & deposit</h3>
+      <p>Party A locks their tokens and sets what they want in return. Share the trade ID with your counterparty.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">STEP 02</div>
+      <h3>Fill the trade</h3>
+      <p>Party B deposits their side. Funds from both parties are now locked in the contract — safe from either party.</p>
+    </div>
+    <div class="step">
+      <div class="step-num">STEP 03</div>
+      <h3>Both confirm → swap</h3>
+      <p>Once both parties confirm, the atomic swap executes. Each party receives what they agreed. No intermediary ever touches your funds.</p>
+    </div>
+  </div>
+</section>
+
+<!-- MAIN TABS -->
+<div class="tabs-wrap">
+
+  <div class="tabs">
+    <button class="tab active" onclick="switchToTab('create')" id="tab-create">Create Trade</button>
+    <button class="tab" onclick="switchToTab('lookup')" id="tab-lookup">Look Up Trade</button>
+    <button class="tab" onclick="switchToTab('mytrades')" id="tab-mytrades">My Trades</button>
+  </div>
+
+  <!-- CREATE TRADE -->
+  <div class="tab-content active" id="content-create">
+    <div class="card">
+      <div class="card-title">New Trade</div>
+
+      <div id="createAlert" class="alert"></div>
+
+      <div id="createWall" class="connect-wall" style="display:none">
+        <p>Connect your wallet to create a trade.</p>
+        <button class="btn btn-primary" onclick="connectWallet()">Connect Wallet</button>
+      </div>
+
+      <div id="createForm">
+        <div class="form-grid">
+          <!-- Side A -->
+          <div class="form-group">
+            <label>You're offering — Token</label>
+            <select id="tokenA" onchange="toggleAmountLabel()">
+              <option value="ETH">ETH (Native)</option>
+              <option value="ERC20">ERC20 Token</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>You're offering — Amount</label>
+            <input type="number" id="amountA" placeholder="0.0" step="any" min="0"/>
+          </div>
+
+          <div class="form-group full" id="tokenAAddrGroup" style="display:none">
+            <label>Token A Contract Address</label>
+            <input type="text" id="tokenAAddr" placeholder="0x..."/>
+          </div>
+
+          <!-- Side B -->
+          <div class="form-group">
+            <label>You want — Token</label>
+            <select id="tokenB" onchange="toggleAmountLabel()">
+              <option value="ETH">ETH (Native)</option>
+              <option value="ERC20">ERC20 Token</option>
+            </select>
+          </div>
+
+          <div class="form-group">
+            <label>You want — Amount</label>
+            <input type="number" id="amountB" placeholder="0.0" step="any" min="0"/>
+          </div>
+
+          <div class="form-group full" id="tokenBAddrGroup" style="display:none">
+            <label>Token B Contract Address</label>
+            <input type="text" id="tokenBAddr" placeholder="0x..."/>
+          </div>
+
+          <!-- Options -->
+          <div class="form-group">
+            <label>Counterparty (optional)</label>
+            <input type="text" id="counterparty" placeholder="0x... or leave blank for public"/>
+            <span class="form-hint">Leave blank so anyone can fill</span>
+          </div>
+
+          <div class="form-group">
+            <label>Expires in</label>
+            <select id="expiry">
+              <option value="3600">1 hour</option>
+              <option value="21600">6 hours</option>
+              <option value="86400" selected>24 hours</option>
+              <option value="259200">3 days</option>
+              <option value="604800">7 days</option>
+            </select>
+          </div>
+
+        </div>
+
+        <div style="margin-top:16px;padding:14px;background:var(--surface);border-radius:8px;font-size:12px;color:var(--muted);font-family:system-ui,sans-serif;">
+          ⚡ Protocol fee: <strong style="color:var(--text)">0.15% per side</strong> — deducted at deposit. Counterparty receives net amount shown.
+        </div>
+
+        <div class="form-actions">
+          <button class="btn btn-primary" onclick="createTrade()" id="createBtn">Create Trade</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- LOOKUP -->
+  <div class="tab-content" id="content-lookup">
+    <div class="card">
+      <div class="card-title">Look Up Trade</div>
+      <div class="lookup-row">
+        <input type="number" id="lookupId" placeholder="Enter Trade ID..." min="1"/>
+        <button class="btn btn-primary" onclick="lookupTrade()">Look Up</button>
+      </div>
+      <div id="lookupAlert" class="alert"></div>
+      <div id="lookupResult"></div>
+    </div>
+  </div>
+
+  <!-- MY TRADES -->
+  <div class="tab-content" id="content-mytrades">
+    <div class="card">
+      <div class="card-title">My Trades</div>
+      <div id="myTradesWall" class="connect-wall">
+        <p>Connect your wallet to see your trades.</p>
+        <button class="btn btn-primary" onclick="connectWallet()">Connect Wallet</button>
+      </div>
+      <div id="myTradesList" style="display:none">
+        <div id="myTradesAlert" class="alert"></div>
+        <div id="myTradesContent"></div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<!-- FOOTER -->
+<footer>
+  <p>OTCEscrow Protocol · Contract: <a id="contractLink" href="#" target="_blank">0x47430c...Cd61428</a> · <a href="https://sepolia.etherscan.io/address/0x47430c176395837126F45780A7E6A5309Cd61428" target="_blank">View on Etherscan</a></p>
+</footer>
+
+<script>
+// ─── CONFIG ───────────────────────────────────────────────────────────────────
+const CONTRACT_ADDRESS = "0x47430c176395837126F45780A7E6A5309Cd61428";
+const SEPOLIA_CHAIN_ID = 11155111;
+
+const ABI = [{"inputs":[{"internalType":"address","name":"_treasury","type":"address"}],"stateMutability":"nonpayable","type":"constructor"},{"inputs":[],"name":"AlreadyConfirmed","type":"error"},{"inputs":[{"internalType":"uint256","name":"tradeId","type":"uint256"}],"name":"cancel","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"uint256","name":"tradeId","type":"uint256"}],"name":"confirm","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"tokenA","type":"address"},{"internalType":"uint256","name":"amountA","type":"uint256"},{"internalType":"address","name":"tokenB","type":"address"},{"internalType":"uint256","name":"amountB","type":"uint256"},{"internalType":"address","name":"counterparty","type":"address"},{"internalType":"uint256","name":"expirySeconds","type":"uint256"}],"name":"createTrade","outputs":[{"internalType":"uint256","name":"tradeId","type":"uint256"}],"stateMutability":"payable","type":"function"},{"inputs":[{"internalType":"uint256","name":"tradeId","type":"uint256"}],"name":"fillTrade","outputs":[],"stateMutability":"payable","type":"function"},{"inputs":[],"name":"IncorrectETHAmount","type":"error"},{"inputs":[],"name":"InvalidExpiry","type":"error"},{"inputs":[],"name":"NotOwner","type":"error"},{"inputs":[],"name":"NotParticipant","type":"error"},{"inputs":[],"name":"NotPartyA","type":"error"},{"inputs":[],"name":"NotPartyB","type":"error"},{"inputs":[],"name":"SameToken","type":"error"},{"inputs":[],"name":"TradeExpired","type":"error"},{"inputs":[],"name":"TradeNotExpired","type":"error"},{"inputs":[],"name":"TradeNotFilled","type":"error"},{"inputs":[],"name":"TradeNotOpen","type":"error"},{"inputs":[],"name":"TransferFailed","type":"error"},{"inputs":[{"internalType":"address","name":"newOwner","type":"address"}],"name":"transferOwnership","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[{"internalType":"address","name":"token","type":"address"}],"name":"withdrawFees","outputs":[],"stateMutability":"nonpayable","type":"function"},{"inputs":[],"name":"WrongCounterparty","type":"error"},{"inputs":[],"name":"ZeroAddress","type":"error"},{"inputs":[],"name":"ZeroAmount","type":"error"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"address","name":"token","type":"address"},{"indexed":false,"internalType":"uint256","name":"amount","type":"uint256"},{"indexed":true,"internalType":"address","name":"to","type":"address"}],"name":"FeesWithdrawn","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"tradeId","type":"uint256"},{"indexed":true,"internalType":"address","name":"cancelledBy","type":"address"},{"indexed":false,"internalType":"string","name":"reason","type":"string"}],"name":"TradeCancelled","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"tradeId","type":"uint256"},{"indexed":true,"internalType":"address","name":"partyA","type":"address"},{"indexed":true,"internalType":"address","name":"partyB","type":"address"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"TradeCompleted","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"tradeId","type":"uint256"},{"indexed":true,"internalType":"address","name":"party","type":"address"},{"indexed":false,"internalType":"bool","name":"bothConfirmed","type":"bool"}],"name":"TradeConfirmed","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"tradeId","type":"uint256"},{"indexed":true,"internalType":"address","name":"partyA","type":"address"},{"indexed":true,"internalType":"address","name":"partyB","type":"address"},{"indexed":false,"internalType":"address","name":"tokenA","type":"address"},{"indexed":false,"internalType":"uint256","name":"amountA","type":"uint256"},{"indexed":false,"internalType":"address","name":"tokenB","type":"address"},{"indexed":false,"internalType":"uint256","name":"amountB","type":"uint256"},{"indexed":false,"internalType":"uint256","name":"expiry","type":"uint256"}],"name":"TradeCreated","type":"event"},{"anonymous":false,"inputs":[{"indexed":true,"internalType":"uint256","name":"tradeId","type":"uint256"},{"indexed":true,"internalType":"address","name":"partyB","type":"address"},{"indexed":false,"internalType":"uint256","name":"timestamp","type":"uint256"}],"name":"TradeFilled","type":"event"},{"inputs":[],"name":"BPS_DENOM","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"ETH","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"FEE_BPS","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tradeId","type":"uint256"}],"name":"getTrade","outputs":[{"components":[{"internalType":"address","name":"partyA","type":"address"},{"internalType":"address","name":"partyB","type":"address"},{"internalType":"address","name":"tokenA","type":"address"},{"internalType":"uint256","name":"amountA","type":"uint256"},{"internalType":"uint256","name":"netAmountA","type":"uint256"},{"internalType":"address","name":"tokenB","type":"address"},{"internalType":"uint256","name":"amountB","type":"uint256"},{"internalType":"uint256","name":"netAmountB","type":"uint256"},{"internalType":"enum OTCEscrow.TradeStatus","name":"status","type":"uint8"},{"internalType":"uint256","name":"expiry","type":"uint256"},{"internalType":"bool","name":"confirmedA","type":"bool"},{"internalType":"bool","name":"confirmedB","type":"bool"}],"internalType":"struct OTCEscrow.Trade","name":"","type":"tuple"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256[]","name":"tradeIds","type":"uint256[]"}],"name":"getTradesBatch","outputs":[{"components":[{"internalType":"address","name":"partyA","type":"address"},{"internalType":"address","name":"partyB","type":"address"},{"internalType":"address","name":"tokenA","type":"address"},{"internalType":"uint256","name":"amountA","type":"uint256"},{"internalType":"uint256","name":"netAmountA","type":"uint256"},{"internalType":"address","name":"tokenB","type":"address"},{"internalType":"uint256","name":"amountB","type":"uint256"},{"internalType":"uint256","name":"netAmountB","type":"uint256"},{"internalType":"enum OTCEscrow.TradeStatus","name":"status","type":"uint8"},{"internalType":"uint256","name":"expiry","type":"uint256"},{"internalType":"bool","name":"confirmedA","type":"bool"},{"internalType":"bool","name":"confirmedB","type":"bool"}],"internalType":"struct OTCEscrow.Trade[]","name":"result","type":"tuple[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"wallet","type":"address"}],"name":"getWalletTrades","outputs":[{"internalType":"uint256[]","name":"","type":"uint256[]"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"tradeId","type":"uint256"}],"name":"isTradeActive","outputs":[{"internalType":"bool","name":"","type":"bool"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MAX_EXPIRY","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"MIN_EXPIRY","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"owner","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"}],"name":"pendingFees","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"uint256","name":"grossAmount","type":"uint256"}],"name":"previewFee","outputs":[{"internalType":"uint256","name":"fee","type":"uint256"},{"internalType":"uint256","name":"net","type":"uint256"}],"stateMutability":"pure","type":"function"},{"inputs":[],"name":"totalTrades","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"},{"inputs":[],"name":"treasury","outputs":[{"internalType":"address","name":"","type":"address"}],"stateMutability":"view","type":"function"},{"inputs":[{"internalType":"address","name":"","type":"address"},{"internalType":"uint256","name":"","type":"uint256"}],"name":"walletTrades","outputs":[{"internalType":"uint256","name":"","type":"uint256"}],"stateMutability":"view","type":"function"}];
+
+const ETH_ADDRESS = "0x0000000000000000000000000000000000000000";
+const STATUS_LABELS = ["Open", "Filled", "Completed", "Cancelled"];
+
+// ─── STATE ────────────────────────────────────────────────────────────────────
+let provider, signer, contract, userAddress;
+
+// ─── WALLET ───────────────────────────────────────────────────────────────────
+async function connectWallet() {
+  if (!window.ethereum) {
+    alert("MetaMask not found. Please install MetaMask.");
+    return;
+  }
+  try {
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
+    const network = await provider.getNetwork();
+
+    if (Number(network.chainId) !== SEPOLIA_CHAIN_ID) {
+      try {
+        await window.ethereum.request({
+          method: "wallet_switchEthereumChain",
+          params: [{ chainId: "0xaa36a7" }]
+        });
+      } catch(e) {
+        alert("Please switch MetaMask to Sepolia Testnet.");
+        return;
+      }
+    }
+
+    signer = await provider.getSigner();
+    userAddress = await signer.getAddress();
+    contract = new ethers.Contract(CONTRACT_ADDRESS, ABI, signer);
+
+    // Update UI
+    const short = userAddress.slice(0,6) + "..." + userAddress.slice(-4);
+    document.getElementById("connectBtn").textContent = short;
+    document.getElementById("connectBtn").classList.remove("btn-primary");
+    document.getElementById("connectBtn").classList.add("btn-outline");
+    document.getElementById("networkBadge").style.display = "inline-block";
+
+    document.getElementById("createWall").style.display = "none";
+    document.getElementById("createForm").style.display = "block";
+    document.getElementById("myTradesWall").style.display = "none";
+    document.getElementById("myTradesList").style.display = "block";
+
+    loadStats();
+    loadMyTrades();
+
+    // Listen for account changes
+    window.ethereum.on("accountsChanged", () => location.reload());
+    window.ethereum.on("chainChanged", () => location.reload());
+
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+// ─── STATS ────────────────────────────────────────────────────────────────────
+async function loadStats() {
+  try {
+    const readProvider = new ethers.JsonRpcProvider("https://rpc.sepolia.org");
+    const readContract = new ethers.Contract(CONTRACT_ADDRESS, ABI, readProvider);
+    const total = await readContract.totalTrades();
+    document.getElementById("statTrades").textContent = total.toString();
+  } catch(e) {}
+}
+
+// ─── TABS ─────────────────────────────────────────────────────────────────────
+function switchToTab(name) {
+  document.querySelectorAll(".tab").forEach(t => t.classList.remove("active"));
+  document.querySelectorAll(".tab-content").forEach(c => c.classList.remove("active"));
+  document.getElementById("tab-" + name).classList.add("active");
+  document.getElementById("content-" + name).classList.add("active");
+}
+
+// ─── FORM TOGGLES ─────────────────────────────────────────────────────────────
+function toggleAmountLabel() {
+  document.getElementById("tokenAAddrGroup").style.display =
+    document.getElementById("tokenA").value === "ERC20" ? "block" : "none";
+  document.getElementById("tokenBAddrGroup").style.display =
+    document.getElementById("tokenB").value === "ERC20" ? "block" : "none";
+}
+
+// ─── CREATE TRADE ─────────────────────────────────────────────────────────────
+async function createTrade() {
+  if (!contract) { showAlert("createAlert", "Connect your wallet first.", "error"); return; }
+
+  const tokenAType  = document.getElementById("tokenA").value;
+  const tokenBType  = document.getElementById("tokenB").value;
+  const amountAVal  = document.getElementById("amountA").value;
+  const amountBVal  = document.getElementById("amountB").value;
+  const cpVal       = document.getElementById("counterparty").value.trim();
+  const expiryVal   = document.getElementById("expiry").value;
+
+  if (!amountAVal || !amountBVal) {
+    showAlert("createAlert", "Enter amounts for both sides.", "error"); return;
+  }
+
+  const tokenAAddr = tokenAType === "ETH" ? ETH_ADDRESS : document.getElementById("tokenAAddr").value.trim();
+  const tokenBAddr = tokenBType === "ETH" ? ETH_ADDRESS : document.getElementById("tokenBAddr").value.trim();
+  const counterparty = cpVal || ETH_ADDRESS;
+
+  const amountAWei = ethers.parseEther(amountAVal);
+  const amountBWei = ethers.parseEther(amountBVal);
+
+  const btn = document.getElementById("createBtn");
+  btn.disabled = true;
+  btn.innerHTML = '<span class="loader"></span>Waiting for wallet...';
+  hideAlert("createAlert");
+
+  try {
+    const txOptions = tokenAType === "ETH" ? { value: amountAWei } : {};
+    const tx = await contract.createTrade(
+      tokenAAddr, amountAWei,
+      tokenBAddr, amountBWei,
+      counterparty, expiryVal,
+      txOptions
+    );
+
+    btn.innerHTML = '<span class="loader"></span>Confirming...';
+    const receipt = await tx.wait();
+
+    // Parse TradeCreated event to get tradeId
+    const iface = new ethers.Interface(ABI);
+    let tradeId = "?";
+    for (const log of receipt.logs) {
+      try {
+        const parsed = iface.parseLog(log);
+        if (parsed.name === "TradeCreated") { tradeId = parsed.args.tradeId.toString(); break; }
+      } catch {}
+    }
+
+    showAlert("createAlert",
+      `✅ Trade #${tradeId} created! Share this ID with your counterparty. TX: ${receipt.hash.slice(0,10)}...`,
+      "success"
+    );
+
+    loadStats();
+    loadMyTrades();
+
+  } catch(e) {
+    showAlert("createAlert", "Transaction failed: " + (e.reason || e.message || "Unknown error"), "error");
+  } finally {
+    btn.disabled = false;
+    btn.innerHTML = "Create Trade";
+  }
+}
+
+// ─── LOOKUP TRADE ─────────────────────────────────────────────────────────────
+async function lookupTrade() {
+  const id = document.getElementById("lookupId").value;
+  if (!id) { showAlert("lookupAlert", "Enter a trade ID.", "error"); return; }
+
+  hideAlert("lookupAlert");
+  document.getElementById("lookupResult").innerHTML = '<div class="empty"><span class="loader"></span> Loading...</div>';
+
+  try {
+    const readProvider = new ethers.JsonRpcProvider("https://rpc.sepolia.org");
+    const readContract = new ethers.Contract(CONTRACT_ADDRESS, ABI, readProvider);
+    const trade = await readContract.getTrade(id);
+    document.getElementById("lookupResult").innerHTML = renderTradeCard(trade, id, true);
+  } catch(e) {
+    document.getElementById("lookupResult").innerHTML = "";
+    showAlert("lookupAlert", "Trade not found or error fetching trade.", "error");
+  }
+}
+
+// ─── MY TRADES ────────────────────────────────────────────────────────────────
+async function loadMyTrades() {
+  if (!contract || !userAddress) return;
+  document.getElementById("myTradesContent").innerHTML = '<div class="empty"><span class="loader"></span> Loading your trades...</div>';
+
+  try {
+    const ids = await contract.getWalletTrades(userAddress);
+    if (ids.length === 0) {
+      document.getElementById("myTradesContent").innerHTML = '<div class="empty">No trades yet. Create your first trade above.</div>';
+      return;
+    }
+
+    const trades = await contract.getTradesBatch(ids);
+    let html = "";
+    for (let i = 0; i < trades.length; i++) {
+      html += renderTradeCard(trades[i], ids[i].toString(), false);
+    }
+    document.getElementById("myTradesContent").innerHTML = html;
+  } catch(e) {
+    document.getElementById("myTradesContent").innerHTML = '<div class="empty">Error loading trades.</div>';
+  }
+}
+
+// ─── RENDER TRADE CARD ────────────────────────────────────────────────────────
+function renderTradeCard(trade, id, isLookup) {
+  const status = Number(trade.status);
+  const statusLabel = STATUS_LABELS[status] || "Unknown";
+  const isETHA = trade.tokenA === ETH_ADDRESS;
+  const isETHB = trade.tokenB === ETH_ADDRESS;
+  const amtA = ethers.formatEther(trade.amountA);
+  const amtB = ethers.formatEther(trade.amountB);
+  const netA = ethers.formatEther(trade.netAmountA);
+  const netB = ethers.formatEther(trade.netAmountB);
+  const tokenALabel = isETHA ? "ETH" : trade.tokenA.slice(0,6) + "...";
+  const tokenBLabel = isETHB ? "ETH" : trade.tokenB.slice(0,6) + "...";
+  const expiry = new Date(Number(trade.expiry) * 1000).toLocaleString();
+  const partyAShort = trade.partyA.slice(0,6) + "..." + trade.partyA.slice(-4);
+  const partyBShort = trade.partyB === ETH_ADDRESS ? "Open" : trade.partyB.slice(0,6) + "..." + trade.partyB.slice(-4);
+  const isOpen = status === 0;
+  const isFilled = status === 1;
+  const isUserA = userAddress && trade.partyA.toLowerCase() === userAddress.toLowerCase();
+  const isUserB = userAddress && trade.partyB.toLowerCase() === userAddress.toLowerCase();
+
+  let actions = "";
+  if (!isLookup && userAddress) {
+    if (isOpen && !isUserA) {
+      actions += `<button class="btn btn-success" onclick="fillTrade(${id}, '${trade.tokenB}', '${trade.amountB}')">Fill Trade</button>`;
+    }
+    if (isFilled) {
+      if ((isUserA && !trade.confirmedA) || (isUserB && !trade.confirmedB)) {
+        actions += `<button class="btn btn-primary" onclick="confirmTrade(${id})">Confirm Swap</button>`;
+      }
+    }
+    if ((isOpen && isUserA) || (isFilled && (isUserA || isUserB))) {
+      actions += `<button class="btn btn-danger" onclick="cancelTrade(${id})">Cancel</button>`;
+    }
+  } else if (isLookup && userAddress) {
+    if (isOpen && !isUserA) {
+      actions += `<button class="btn btn-success" onclick="fillTrade(${id}, '${trade.tokenB}', '${trade.amountB}')">Fill This Trade</button>`;
+    }
+    if (isFilled && (isUserA || isUserB)) {
+      if ((isUserA && !trade.confirmedA) || (isUserB && !trade.confirmedB)) {
+        actions += `<button class="btn btn-primary" onclick="confirmTrade(${id})">Confirm Swap</button>`;
+      }
+      actions += `<button class="btn btn-danger" onclick="cancelTrade(${id})">Cancel</button>`;
+    }
+  }
+
+  return `
+  <div class="trade-card">
+    <div class="trade-header">
+      <span class="trade-id">Trade <strong>#${id}</strong></span>
+      <span class="status-badge status-${status}">${statusLabel}</span>
+    </div>
+    <div class="trade-swap">
+      <div class="trade-side">
+        <div class="trade-amount">${parseFloat(amtA).toFixed(4)}</div>
+        <div class="trade-token">${tokenALabel} offered</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">Net: ${parseFloat(netA).toFixed(4)}</div>
+      </div>
+      <div class="swap-arrow">⇄</div>
+      <div class="trade-side">
+        <div class="trade-amount">${parseFloat(amtB).toFixed(4)}</div>
+        <div class="trade-token">${tokenBLabel} requested</div>
+        <div style="font-size:10px;color:var(--muted);margin-top:4px;">Net: ${parseFloat(netB).toFixed(4)}</div>
+      </div>
+    </div>
+    <div class="trade-meta">
+      <span>👤 A: ${partyAShort}</span>
+      <span>👤 B: ${partyBShort}</span>
+      <span>⏱ Expires: ${expiry}</span>
+    </div>
+    ${isFilled ? `
+    <div class="confirm-row">
+      <span class="confirm-pill ${trade.confirmedA ? 'done' : ''}">Party A ${trade.confirmedA ? '✓ confirmed' : 'pending'}</span>
+      <span class="confirm-pill ${trade.confirmedB ? 'done' : ''}">Party B ${trade.confirmedB ? '✓ confirmed' : 'pending'}</span>
+    </div>` : ""}
+    ${actions ? `<div class="trade-actions">${actions}</div>` : ""}
+  </div>`;
+}
+
+// ─── FILL TRADE ───────────────────────────────────────────────────────────────
+async function fillTrade(tradeId, tokenB, amountB) {
+  if (!contract) { alert("Connect your wallet first."); return; }
+  try {
+    const isETH = tokenB === ETH_ADDRESS;
+    const txOptions = isETH ? { value: BigInt(amountB) } : {};
+    const tx = await contract.fillTrade(tradeId, txOptions);
+    await tx.wait();
+    alert(`✅ Trade #${tradeId} filled! Both parties must now confirm to execute the swap.`);
+    loadMyTrades();
+    if (document.getElementById("lookupId").value === tradeId.toString()) lookupTrade();
+  } catch(e) {
+    alert("Failed: " + (e.reason || e.message));
+  }
+}
+
+// ─── CONFIRM TRADE ────────────────────────────────────────────────────────────
+async function confirmTrade(tradeId) {
+  if (!contract) { alert("Connect your wallet first."); return; }
+  try {
+    const tx = await contract.confirm(tradeId);
+    await tx.wait();
+    alert(`✅ Confirmed! Once both parties confirm, the swap executes automatically.`);
+    loadMyTrades();
+  } catch(e) {
+    alert("Failed: " + (e.reason || e.message));
+  }
+}
+
+// ─── CANCEL TRADE ─────────────────────────────────────────────────────────────
+async function cancelTrade(tradeId) {
+  if (!confirm(`Cancel trade #${tradeId}? Funds will be refunded.`)) return;
+  if (!contract) { alert("Connect your wallet first."); return; }
+  try {
+    const tx = await contract.cancel(tradeId);
+    await tx.wait();
+    alert(`✅ Trade #${tradeId} cancelled. Funds refunded.`);
+    loadMyTrades();
+  } catch(e) {
+    alert("Failed: " + (e.reason || e.message));
+  }
+}
+
+// ─── ALERT HELPERS ────────────────────────────────────────────────────────────
+function showAlert(id, msg, type) {
+  const el = document.getElementById(id);
+  el.className = "alert alert-" + type;
+  el.textContent = msg;
+  el.style.display = "block";
+}
+
+function hideAlert(id) {
+  document.getElementById(id).style.display = "none";
+}
+
+// ─── INIT ─────────────────────────────────────────────────────────────────────
+document.addEventListener("DOMContentLoaded", () => {
+  // Show connect wall on create tab by default
+  document.getElementById("createForm").style.display = "none";
+  document.getElementById("createWall").style.display = "block";
+
+  // Set contract link
+  document.getElementById("contractLink").href =
+    `https://sepolia.etherscan.io/address/${CONTRACT_ADDRESS}`;
+  document.getElementById("contractLink").textContent =
+    CONTRACT_ADDRESS.slice(0,6) + "..." + CONTRACT_ADDRESS.slice(-6);
+
+  // Load stats without wallet
+  loadStats();
+
+  // Auto-connect if already approved
+  if (window.ethereum) {
+    window.ethereum.request({ method: "eth_accounts" }).then(accounts => {
+      if (accounts.length > 0) connectWallet();
+    });
+  }
+});
+</script>
+</body>
+</html>
